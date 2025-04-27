@@ -137,32 +137,6 @@ public class PostController {
         return ResponseEntity.ok(postsList);
     }
 
-    @GetMapping(
-            path = "/api/posts/type/{petType}"
-    )
-    public ResponseEntity<?> getPostByType(
-            @RequestHeader("Authorization") String authHeader,
-            @PathVariable("petType") String petType
-    ) {
-
-        if(authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("JWT Token is missing");
-        }
-
-        String token = authHeader.substring(7);
-
-        if(!jwtUtil.validateJwtToken(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid JWT token");
-        }
-
-        List<FilteredPostResponse> postsList = postService.getByType(petType);
-
-        if(postsList.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.EMPTY_LIST);
-        }
-        return ResponseEntity.ok(postsList);
-    }
-
     @PatchMapping(
             path = "api/posts/{postId}/availability"
     )
@@ -197,13 +171,13 @@ public class PostController {
             @RequestHeader("Authorization") String authHeader,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "size", defaultValue = "10") int size,
-            @RequestParam(value = "petType", required = false, defaultValue = "Cat") String petType,
+            @RequestParam(value = "petType", required = false) String petType,
             @RequestParam(value = "petBreed", required = false) String petBreed,
-            @RequestParam(value = "isAvailable", defaultValue = "true") boolean isAvailable
+            @RequestParam(value = "isAvailable", defaultValue = "true", required = false) boolean isAvailable
     ) {
 
-        if(authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("JWT Token is missing");
+        if(authHeader == null || !authHeader.startsWith("Bearer")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("tidak diawali dengan bearer");
         }
 
         String token = authHeader.substring(7);
@@ -272,18 +246,29 @@ public class PostController {
     }
 
     @GetMapping(
-            path = "/api/posts/{filename:..+"
+            path = "/images/{filename:.+}"
     )
-    public ResponseEntity<Resource> getFile(@PathVariable String fileName) {
+    public ResponseEntity<Resource> getFile(@PathVariable String filename) {
         try {
-            Resource resource = postService.loadFile(fileName);
+            Resource resource = postService.loadFile(filename);
+
+            String contentType = "application/octet-stream";
+            if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
+                contentType = MediaType.IMAGE_JPEG_VALUE;
+            } else if (filename.endsWith(".png")) {
+                contentType = MediaType.IMAGE_PNG_VALUE;
+            } else if (filename.endsWith(".webp")) {
+                contentType = "image/webp";
+            }
+
             return ResponseEntity.ok()
-                    .contentType(MediaType.IMAGE_JPEG)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
                     .body(resource);
-        } catch(ResponseStatusException e) {
+        } catch (ResponseStatusException e) {
             return ResponseEntity.status(e.getStatusCode())
                     .body(null);
         }
     }
+
 }

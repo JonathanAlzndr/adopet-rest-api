@@ -272,7 +272,7 @@ public class PostController {
     }
 
     @GetMapping(
-            path = "/api/posts/{filename:..+"
+            path = "/api/posts/{filename:..+}"
     )
     public ResponseEntity<Resource> getFile(@PathVariable String fileName) {
         try {

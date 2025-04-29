@@ -18,6 +18,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -81,40 +83,20 @@ public class PostService {
             int page,
             int size
     ) {
-
         Pageable pageable = PageRequest.of(page - 1, size);
-
-        Page<Post> pagination = postRepository.findByPetTypeAndPetBreedAndIsAvailable(petType, petBreed, isAvailable, pageable);
-        PostListResponse postListResponse;
-        if (!pagination.isEmpty()) {
-            List<DetailPostResponse> listPost = pagination.getContent().stream().map(post ->
-                    DetailPostResponse.builder().postId(post.getPostId())
-                            .petName(post.getPetName())
-                            .petBreed(post.getPetBreed())
-                            .petType(post.getPetType())
-                            .imageUrl(post.getImageUrl())
-                            .description(post.getDescription())
-                            .postDate(post.getPostDate())
-                            .confidenceScore(post.getConfidenceScore())
-                            .isAvailable(post.getIsAvailable())
-                            .petAge(post.getPetAge())
-                            .petOwner(new PetOwnerModel(post.getPetOwner().getId(),
-                                    post.getPetOwner().getUsername(),
-                                    post.getPetOwner().getEmail(),
-                                    post.getPetOwner().getPhoneNumber())
-                            )
-                            .build()
-            ).toList();
-            postListResponse = PostListResponse.builder()
-                    .data(listPost)
-                    .page(PageDataModel.builder()
-                            .totalPosts(pagination.getTotalElements())
-                            .totalPages(pagination.getTotalPages())
-                            .currentPage(pagination.getNumber())
-                            .build())
-                    .build();
+        Page<Post> pagination;
+        if(petType == null || petBreed == null) {
+            pagination = postRepository.findAll(pageable);
+        } else if(petType.equals("Cat") || petType.equals("Dog")) {
+            pagination = postRepository.searchByPetType(petType, pageable);
+        }
+        else {
+            pagination = postRepository.findByPetTypeAndPetBreedAndIsAvailable(petType, petBreed, isAvailable, pageable);
+        }
+        if(!pagination.isEmpty()) {
+           return convertToDetailListResponse(pagination);
         } else {
-            postListResponse = PostListResponse.builder()
+            return PostListResponse.builder()
                     .data(Collections.emptyList())
                     .page(PageDataModel.builder()
                             .totalPosts(0L)
@@ -123,8 +105,6 @@ public class PostService {
                             .build())
                     .build();
         }
-
-        return postListResponse;
     }
 
     // Get Detail
@@ -156,38 +136,6 @@ public class PostService {
     public List<FilteredPostResponse> getByBreed(String breed) {
 
         List<Post> postsList = postRepository.searchByPetBreed(breed);
-        List<FilteredPostResponse> newList = new ArrayList<>();
-
-        if(!postsList.isEmpty()) {
-            for(Post post : postsList) {
-                FilteredPostResponse postBreed = FilteredPostResponse.builder()
-                        .postId(post.getPostId())
-                        .postDate(post.getPostDate())
-                        .imageUrl(post.getImageUrl())
-                        .petAge(post.getPetAge())
-                        .petType(post.getPetType())
-                        .confidenceScore(post.getConfidenceScore())
-                        .isAvailable(post.getIsAvailable())
-                        .description(post.getDescription())
-                        .build();
-
-                PetOwnerModel petOwner = PetOwnerModel.builder()
-                        .id(post.getPetOwner().getId())
-                        .phoneNumber(post.getPetOwner().getPhoneNumber())
-                        .email(post.getPetOwner().getEmail())
-                        .build();
-
-                postBreed.setPetOwner(petOwner);
-                newList.add(postBreed);
-            }
-        }
-        return newList;
-    }
-
-    // Get by Type
-    public List<FilteredPostResponse> getByType(String type) {
-
-        List<Post> postsList = postRepository.searchByPetType(type);
         List<FilteredPostResponse> newList = new ArrayList<>();
 
         if(!postsList.isEmpty()) {
@@ -287,11 +235,16 @@ public class PostService {
     }
 
     public Resource loadFile(String filename) {
-        final Path rootLocation = Paths.get("D:/fileUpload");
+        final Path rootLocation = Paths.get("D:/adopetFile");
         try {
-            Path file = rootLocation.resolve(filename).normalize().toAbsolutePath();
+            Path file = rootLocation.resolve(   filename).normalize().toAbsolutePath();
+
+            if (!file.startsWith(rootLocation.toAbsolutePath())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: " + filename);
+            }
+
             Resource resource = new UrlResource(file.toUri());
-            if (resource.exists() || resource.isReadable()) {
+            if (resource.exists() && resource.isReadable()) {
                 return resource;
             } else {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Could not read file: " + filename);
@@ -300,4 +253,42 @@ public class PostService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Could not read file: " + filename, e);
         }
     }
+
+
+    private PostListResponse convertToDetailListResponse(Page<Post> pagination) {
+        String baseUrl = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString() + "/images/";
+
+        List<DetailPostResponse> listPost = pagination.getContent().stream().map(post -> {
+            String filename = Paths.get(post.getImageUrl()).getFileName().toString();
+
+            return DetailPostResponse.builder()
+                    .postId(post.getPostId())
+                    .petName(post.getPetName())
+                    .petBreed(post.getPetBreed())
+                    .petType(post.getPetType())
+                    .imageUrl(baseUrl + filename)
+                    .description(post.getDescription())
+                    .postDate(post.getPostDate())
+                    .confidenceScore(post.getConfidenceScore())
+                    .isAvailable(post.getIsAvailable())
+                    .petAge(post.getPetAge())
+                    .petOwner(new PetOwnerModel(
+                            post.getPetOwner().getId(),
+                            post.getPetOwner().getUsername(),
+                            post.getPetOwner().getEmail(),
+                            post.getPetOwner().getPhoneNumber()
+                    ))
+                    .build();
+        }).toList();
+
+        return PostListResponse.builder()
+                .data(listPost)
+                .page(PageDataModel.builder()
+                        .totalPosts(pagination.getTotalElements())
+                        .totalPages(pagination.getTotalPages())
+                        .currentPage(pagination.getNumber())
+                        .build())
+                .build();
+    }
+
 }

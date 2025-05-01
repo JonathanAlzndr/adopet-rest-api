@@ -7,7 +7,6 @@ import com.adopet.adopet_rest_api.repository.PostRepository;
 import com.adopet.adopet_rest_api.repository.UserRepository;
 import com.adopet.adopet_rest_api.security.JwtUtil;
 import jakarta.transaction.Transactional;
-import org.apache.tomcat.util.http.parser.Authorization;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -32,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -57,6 +56,7 @@ public class PostService {
                 .petName(request.getPetName())
                 .petType(request.getPetType())
                 .petBreed(request.getPetBreed())
+                .petAge(request.getPetAge())
                 .petOwner(user)
                 .postDate(LocalDateTime.now())
                 .isAvailable(request.getIsAvailable())
@@ -109,8 +109,11 @@ public class PostService {
 
     // Get Detail
     public DetailPostResponse getPostDetail(User user, Long postId) {
+        String baseUrl = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString() + "/images/";
+
         Post post = postRepository.findById(postId).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found"));
+        String filename = Paths.get(post.getImageUrl()).getFileName().toString();
 
         PetOwnerModel petOwner = PetOwnerModel.builder()
                 .email(user.getEmail())
@@ -122,7 +125,9 @@ public class PostService {
         return DetailPostResponse.builder()
                 .petOwner(petOwner)
                 .postDate(post.getPostDate())
-                .imageUrl(post.getImageUrl())
+                .imageUrl(baseUrl + filename)
+                .confidenceScore(post.getConfidenceScore())
+                .petAge(post.getPetAge())
                 .isAvailable(post.getIsAvailable())
                 .description(post.getDescription())
                 .petName(post.getPetName())
@@ -175,51 +180,47 @@ public class PostService {
     }
 
     // Get Upload History
-    public HistoryListResponse getUploadHistory(User user, Boolean isAvailable, int page, int size) {
+    public HistoryListResponse getUploadHistory(User user, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size);
+        Page<Post> pagination = postRepository.findByPetOwnerId(user.getId(), pageable);
 
-        Page<Post> pagination = postRepository.findByPetOwnerIdAndIsAvailable(user.getId(), isAvailable, pageable);
-        HistoryListResponse historyListResponse;
+        String baseUrl = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString() + "/images/";
 
-        if(!pagination.isEmpty()) {
-            List<HistoryPost> listHistoryPost = pagination.getContent().stream().map(post ->
-                    HistoryPost.builder()
+        List<HistoryPost> listHistoryPost = pagination.getContent().stream()
+                .map(post -> {
+                    String filename = Paths.get(post.getImageUrl()).getFileName().toString();
+                    return HistoryPost.builder()
                             .postId(post.getPostId())
                             .description(post.getDescription())
                             .petType(post.getPetType())
+                            .petName(post.getPetName())
+                            .petBreed(post.getPetBreed())
+                            .postDate(post.getPostDate())
+                            .petAge(post.getPetAge())
                             .confidenceScore(post.getConfidenceScore())
-                            .imageUrl(post.getImageUrl())
+                            .imageUrl(baseUrl + filename)
                             .isAvailable(post.getIsAvailable())
-                            .build()
-                    ).toList();
-            historyListResponse = HistoryListResponse.builder()
-                    .posts(listHistoryPost)
-                    .page(PageDataModel.builder()
-                            .totalPosts(pagination.getTotalElements())
-                            .totalPages(pagination.getTotalPages())
-                            .currentPage(pagination.getNumber())
-                            .build())
-                    .build();
-        } else {
-            historyListResponse = HistoryListResponse.builder()
-                    .page(PageDataModel.builder()
-                            .totalPosts(0L)
-                            .totalPages(0)
-                            .currentPage(0)
-                            .build())
-                    .posts(Collections.emptyList())
-                    .build();
-        }
-        return historyListResponse;
+                            .build();
+                })
+                .collect(Collectors.toList());
 
+        PageDataModel pageData = PageDataModel.builder()
+                .totalPosts(pagination.getTotalElements())
+                .totalPages(pagination.getTotalPages())
+                .currentPage(pagination.getNumber())
+                .build();
+
+        return HistoryListResponse.builder()
+                .posts(listHistoryPost)
+                .page(pageData)
+                .build();
     }
-
 
     private String saveUploadFile(MultipartFile file) {
         try {
             String uploadDir = "D:\\adopetFile";
             File directory = new File(uploadDir);
-            if(!directory.exists()) {
+            if(!directory.exists()) {   
                 directory.mkdirs();
             }
             String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();

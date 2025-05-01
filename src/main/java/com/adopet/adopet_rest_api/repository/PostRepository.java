@@ -26,8 +26,5 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             Pageable pageable
     );
 
-    Page<Post> findByPetOwnerIdAndIsAvailable(Long petOwnerId,
-                                              Boolean isAvailable,
-                                              Pageable pageable
-    );
+    Page<Post> findByPetOwnerId(Long petOwnerId, Pageable pageable);
 }

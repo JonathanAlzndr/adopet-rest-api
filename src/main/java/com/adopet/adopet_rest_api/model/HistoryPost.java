@@ -29,4 +29,6 @@ public class HistoryPost {
     private Boolean isAvailable;
 
     private LocalDateTime postDate;
+
+    private int petAge;
 }

@@ -44,17 +44,18 @@ public class PostController {
     private static final Logger logger = LoggerFactory.getLogger(PostController.class);
 
     @PostMapping(
-            path = "/api/posts"
+            path = "/api/posts",
+            produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public ResponseEntity<?> uploadPost(
+    public ResponseEntity<?> uploadPost(    
             @RequestHeader("Authorization") String authHeader,
             @RequestParam("petName") String petName,
             @RequestParam("petBreed") String petBreed,
             @RequestParam("petType") String petType,
-            @RequestParam("petAge") int petAge,
+            @RequestParam("petAge") Integer petAge,
             @RequestParam("description") String description,
-            @RequestParam("confidenceScore") double confidenceScore,
-            @RequestPart("image") MultipartFile imageFile)
+            @RequestParam("confidenceScore") Double confidenceScore,
+            @RequestParam("image") MultipartFile imageFile)
     {
         if(authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("JWT Token is missing");
@@ -78,6 +79,8 @@ public class PostController {
                 .confidenceScore(confidenceScore)
                 .petOwnerId(user.getId())
                 .build();
+
+        System.out.println(request.getPetAge());
 
         Long postId = postService.upload(user, request, imageFile);
         UploadPostResponse response = UploadPostResponse.builder()
@@ -136,7 +139,7 @@ public class PostController {
         }
         return ResponseEntity.ok(postsList);
     }
-
+    
     @PatchMapping(
             path = "api/posts/{postId}/availability"
     )
@@ -197,8 +200,7 @@ public class PostController {
     public ResponseEntity<?> getUploadHistory(
             @RequestHeader("Authorization") String authHeader,
             @RequestParam(value = "page", defaultValue = "1") int page,
-            @RequestParam(value = "size", defaultValue = "10") int size,
-            @RequestParam(value = "isAvailable", defaultValue = "false") Boolean isAvailable
+            @RequestParam(value = "size", defaultValue = "10") int size
     ) {
 
         if(authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -215,7 +217,7 @@ public class PostController {
         User user = userRepository.findByUsername(username).orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        HistoryListResponse historyListResponse =  postService.getUploadHistory(user, isAvailable, page, size);
+        HistoryListResponse historyListResponse =  postService.getUploadHistory(user, page, size);
         return ResponseEntity.ok(historyListResponse);
     }
 

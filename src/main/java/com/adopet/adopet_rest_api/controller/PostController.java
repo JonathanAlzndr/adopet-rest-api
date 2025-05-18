@@ -77,7 +77,7 @@ public class PostController {
                 .description(description)
                 .isAvailable(true)
                 .confidenceScore(confidenceScore)
-                .petOwnerId(user.getId())
+                 .petOwnerId(user.getId())
                 .build();
 
         System.out.println(request.getPetAge());
